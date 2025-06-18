@@ -76,7 +76,21 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 				startPos := l.pos
 				l.backup()
 				lit := l.lexIdent()
-				return startPos, tokens.IDENT, lit
+
+				switch lit {
+				case "func":
+					return startPos, tokens.FUNC, lit
+				case "var":
+					return startPos, tokens.VAR, lit
+				case "return":
+					return startPos, tokens.RETURN, lit
+				case "int":
+					return startPos, tokens.INT, lit
+				case "string":
+					return startPos, tokens.STRING, lit
+				default:
+					return startPos, tokens.IDENT, lit
+				}
 			} else {
 				return l.pos, tokens.ILLEGAL, string(r)
 			}

@@ -12,12 +12,23 @@ const (
 	CHAR
 	BOOL
 	STRING
+	TRUE
+	FALSE
 
 	ASSIGN
 	ADD
 	SUB
 	MUL
 	DIV
+
+	EQUAL
+	NEQUAL
+	LT
+	LTOE
+	GT
+	GTOE
+	AND
+	OR
 
 	SEMI
 	LPAREN
@@ -43,17 +54,27 @@ var tokens = []string{
 	ILLEGAL: "ILLEGAL",
 
 	IDENT:  "IDENT",
-	INT:    "INT",
-	FLOAT:  "FLOAT",
-	CHAR:   "CHAR",
-	BOOL:   "BOOL",
-	STRING: "STRING",
+	INT:    "int",
+	FLOAT:  "float",
+	CHAR:   "char",
+	BOOL:   "bool",
+	STRING: "string",
+	TRUE:   "true",
+	FALSE:  "false",
 
 	ASSIGN: "=",
 	ADD:    "+",
 	SUB:    "-",
 	MUL:    "*",
 	DIV:    "/",
+	EQUAL:  "==",
+	NEQUAL: "!=",
+	LT:     "<",
+	LTOE:   "<=",
+	GT:     ">",
+	GTOE:   ">=",
+	AND:    "&&",
+	OR:     "||",
 
 	SEMI:   ";",
 	LPAREN: "(",
