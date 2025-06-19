@@ -24,9 +24,6 @@ func NewParser(reader io.Reader) *Parser {
 
 func (p *Parser) advance() {
 	p.pos, p.currToken, p.currLex = p.lexer.Lex()
-	fmt.Println("position ", p.pos)
-	fmt.Println("token ", p.currToken)
-	fmt.Println("lexical ", p.currLex)
 }
 
 func (p *Parser) expect(expectedToken tokens.Token) {
@@ -47,33 +44,29 @@ func (p *Parser) parseBlock() {
 	p.expect(tokens.RBRACE)
 }
 
+func isValidType(t tokens.Token) bool {
+	return t == tokens.INT || t == tokens.STRING || t == tokens.FLOAT || t == tokens.CHAR || t == tokens.BOOL
+}
+
 func (p *Parser) ParseProgram() {
 	for p.currToken != tokens.EOF {
 		switch p.currToken {
 		case tokens.FUNC:
-			fmt.Println("FUNC GLOBAL")
 			p.parseFunction()
 		case tokens.IF:
-			fmt.Println("IF GLOBAL")
 			p.parseIf()
 		case tokens.VAR:
-			fmt.Println("VAR GLOBAL")
 			p.parseVar()
 		case tokens.FOR:
-			fmt.Println("FOR GLOBAL")
 			p.parseFor()
 		case tokens.WHILE:
-			fmt.Println("WHILE GLOBAL")
 			p.parseWhile()
 		case tokens.PRINT:
-			fmt.Println("PRINT GLOBAL")
 			p.parsePrint()
 		case tokens.INPUT:
-			fmt.Println("INPUT GLOBAL")
 			p.parseInput()
 		case tokens.IDENT:
-			fmt.Println("IDENT GLOBAL")
-			p.parseStatement()
+			p.parseAssignmentOrFuncCall(true)
 		default:
 			panic(fmt.Sprintf("unexpected token %v at %v", p.currToken, p.pos))
 		}
@@ -81,42 +74,58 @@ func (p *Parser) ParseProgram() {
 }
 
 func (p *Parser) parseStatement() {
-	fmt.Println(p.currToken)
 	switch p.currToken {
 	case tokens.IF:
-		fmt.Println("IF")
 		p.parseIf()
 	case tokens.VAR:
-		fmt.Println("VAR")
 		p.parseVar()
 	case tokens.FOR:
-		fmt.Println("FOR")
 		p.parseFor()
 	case tokens.WHILE:
-		fmt.Println("WHILE")
 		p.parseWhile()
 	case tokens.PRINT:
-		fmt.Println("PRINT")
 		p.parsePrint()
 	case tokens.INPUT:
-		fmt.Println("INPUT")
 		p.parseInput()
-	case tokens.IDENT:
-		fmt.Println("IDENT")
-		p.parseAssignmentOrFuncCall()
-	case tokens.LBRACE:
-		fmt.Println("LBRACE")
-		p.parseBlock()
 	case tokens.RETURN:
-		fmt.Println("RETURN")
 		p.parseReturn()
+	case tokens.IDENT:
+		p.parseAssignmentOrFuncCall(true)
 	default:
 		panic(fmt.Sprintf("unexpected token %v at %v", p.currToken, p.pos))
 	}
 }
 
-func isValidType(t tokens.Token) bool {
-	return t == tokens.INT || t == tokens.STRING || t == tokens.BOOL || t == tokens.CHAR || t == tokens.FLOAT
+func (p *Parser) parseAssignmentOrFuncCall(requireSemi bool) {
+	if p.currToken != tokens.IDENT {
+		panic(fmt.Sprintf("expected identifier, got %v at %v", p.currToken, p.pos))
+	}
+
+	p.advance()
+
+	switch p.currToken {
+	case tokens.ASSIGN:
+		p.advance()
+		p.parseAdditive()
+
+		if requireSemi {
+			if p.currToken != tokens.SEMI {
+				panic(fmt.Sprintf("expected token ;, got token: %v at position: %v", p.currToken, p.pos))
+			}
+
+			p.advance()
+		}
+	case tokens.LPAREN:
+		p.advance()
+		p.parseArguments()
+		p.expect(tokens.RPAREN)
+
+		if requireSemi {
+			p.expect(tokens.SEMI)
+		}
+	default:
+		panic(fmt.Sprintf("unexpected token after identifier %v at %v", p.currToken, p.pos))
+	}
 }
 
 func (p *Parser) parseFunction() {
@@ -133,7 +142,7 @@ func (p *Parser) parseFunction() {
 	p.expect(tokens.COLON)
 
 	if !isValidType(p.currToken) {
-		panic(fmt.Sprintf("expected variable type, got %v at %v", p.currToken, p.pos))
+		panic(fmt.Sprintf("expected return type, got %v at %v", p.currToken, p.pos))
 	}
 
 	p.advance()
@@ -141,11 +150,7 @@ func (p *Parser) parseFunction() {
 }
 
 func (p *Parser) parseFunctionParameters() {
-	if p.currToken == tokens.RPAREN {
-		return
-	}
-
-	for {
+	for p.currToken != tokens.RPAREN {
 		if p.currToken != tokens.IDENT {
 			panic(fmt.Sprintf("expected parameter name, got %v at %v", p.currToken, p.pos))
 		}
@@ -159,11 +164,9 @@ func (p *Parser) parseFunctionParameters() {
 
 		p.advance()
 
-		if p.currToken != tokens.COMMA {
-			break
+		if p.currToken == tokens.COMMA {
+			p.advance()
 		}
-
-		p.advance()
 	}
 }
 
@@ -178,6 +181,14 @@ func (p *Parser) parseIf() {
 		p.advance()
 		p.parseBlock()
 	}
+}
+
+func (p *Parser) parseWhile() {
+	p.expect(tokens.WHILE)
+	p.expect(tokens.LPAREN)
+	p.parseComparison()
+	p.expect(tokens.RPAREN)
+	p.parseBlock()
 }
 
 func (p *Parser) parseVar() {
@@ -198,7 +209,33 @@ func (p *Parser) parseVar() {
 
 	if p.currToken == tokens.ASSIGN {
 		p.advance()
-		p.parseComparison()
+		p.parseAdditive()
+	}
+
+	p.expect(tokens.SEMI)
+}
+
+func (p *Parser) parsePrint() {
+	p.expect(tokens.PRINT)
+	p.expect(tokens.LPAREN)
+	p.parseAdditive()
+	p.expect(tokens.RPAREN)
+	p.expect(tokens.SEMI)
+}
+
+func (p *Parser) parseInput() {
+	p.expect(tokens.INPUT)
+	p.expect(tokens.LPAREN)
+	p.expect(tokens.IDENT)
+	p.expect(tokens.RPAREN)
+	p.expect(tokens.SEMI)
+}
+
+func (p *Parser) parseReturn() {
+	p.expect(tokens.RETURN)
+
+	if p.currToken != tokens.SEMI {
+		p.parseAdditive()
 	}
 
 	p.expect(tokens.SEMI)
@@ -211,47 +248,22 @@ func (p *Parser) parseFor() {
 	if p.currToken == tokens.VAR {
 		p.parseVar()
 	} else {
-		p.parseAssignmentOrFuncCall()
+		p.parseAssignmentOrFuncCall(true)
 	}
 
 	p.parseComparison()
 	p.expect(tokens.SEMI)
-	p.parseComparison()
-	p.parseAssignmentOrFuncCall()
+	p.parseAssignmentOrFuncCall(false)
 	p.expect(tokens.RPAREN)
 	p.parseBlock()
 }
 
-func (p *Parser) parseAssignmentOrFuncCall() {
-	p.advance()
-
-	if p.currToken == tokens.ASSIGN {
-		p.advance()
-		p.parseComparison()
-		p.expect(tokens.SEMI)
-	} else if p.currToken == tokens.LPAREN {
-		p.advance()
-		p.parseArguments()
-		p.expect(tokens.RPAREN)
-		p.expect(tokens.SEMI)
-	} else {
-		panic(fmt.Sprintf("unexpected token after identifier %v at %v", p.currToken, p.pos))
-	}
-}
-
 func (p *Parser) parseArguments() {
-	if p.currToken == tokens.RPAREN {
-		return
-	}
-
-	for {
-		p.parseComparison()
-
-		if p.currToken != tokens.COMMA {
-			break
+	for p.currToken != tokens.RPAREN {
+		p.parseAdditive()
+		if p.currToken == tokens.COMMA {
+			p.advance()
 		}
-
-		p.advance()
 	}
 }
 
@@ -263,6 +275,10 @@ func (p *Parser) parseComparison() {
 		p.currToken == tokens.GT || p.currToken == tokens.GTOE {
 		p.advance()
 		p.parseAdditive()
+	}
+
+	if p.currToken == tokens.ASSIGN {
+		panic(fmt.Sprintf("unexpected assignment operator in comparison at %v", p.pos))
 	}
 }
 
@@ -284,63 +300,21 @@ func (p *Parser) parseMultiplicative() {
 	}
 }
 
-func (p *Parser) parseWhile() {
-	p.expect(tokens.WHILE)
-	p.expect(tokens.LPAREN)
-	p.parseComparison()
-	p.expect(tokens.RPAREN)
-	p.parseBlock()
-}
-
-func (p *Parser) parsePrint() {
-	p.expect(tokens.PRINT)
-	p.expect(tokens.LPAREN)
-	p.parseComparison()
-	p.expect(tokens.RPAREN)
-	p.expect(tokens.SEMI)
-}
-
-func (p *Parser) parseInput() {
-	p.expect(tokens.INPUT)
-	p.expect(tokens.LPAREN)
-
-	if p.currToken != tokens.IDENT {
-		panic(fmt.Sprintf("expected variable name in input, got %v at %v", p.currToken, p.pos))
-	}
-
-	p.advance()
-	p.expect(tokens.RPAREN)
-	p.expect(tokens.SEMI)
-}
-
 func (p *Parser) parseFactor() {
 	switch p.currToken {
-	case tokens.INT, tokens.CHAR, tokens.FLOAT, tokens.STRING, tokens.TRUE, tokens.FALSE:
+	case tokens.INT, tokens.STRING, tokens.FLOAT, tokens.CHAR, tokens.BOOL:
 		p.advance()
-	case tokens.VAR:
-		p.parseVar()
-	case tokens.LPAREN:
-		p.advance()
-		p.parseComparison()
-		p.expect(tokens.RPAREN)
 	case tokens.IDENT:
 		p.advance()
+
 		if p.currToken == tokens.LPAREN {
 			p.advance()
 			p.parseArguments()
 			p.expect(tokens.RPAREN)
+		} else if p.currToken == tokens.ASSIGN {
+			panic(fmt.Sprintf("unexpected assignment operator in factor at %v", p.pos))
 		}
 	default:
 		panic(fmt.Sprintf("unexpected token %v at %v", p.currToken, p.pos))
 	}
-}
-
-func (p *Parser) parseReturn() {
-	p.expect(tokens.RETURN)
-
-	if p.currToken != tokens.SEMI {
-		p.parseComparison()
-	}
-
-	p.expect(tokens.SEMI)
 }

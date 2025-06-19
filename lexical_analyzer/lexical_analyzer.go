@@ -63,7 +63,41 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 		case '/':
 			return l.pos, tokens.DIV, "/"
 		case '=':
+			next, _, err := l.reader.ReadRune()
+			if err == nil && next == '=' {
+				l.pos.Column++
+				return l.pos, tokens.EQUAL, "=="
+			}
+			l.backup()
 			return l.pos, tokens.ASSIGN, "="
+		case '!':
+			next, _, err := l.reader.ReadRune()
+			if err == nil && next == '=' {
+				l.pos.Column++
+				return l.pos, tokens.NEQUAL, "!="
+			}
+			l.backup()
+			return l.pos, tokens.NOT, "!"
+		case '<':
+			next, _, err := l.reader.ReadRune()
+			if err == nil && next == '=' {
+				l.pos.Column++
+				return l.pos, tokens.LTOE, "<="
+			}
+			l.backup()
+			return l.pos, tokens.LT, "<"
+		case '>':
+			next, _, err := l.reader.ReadRune()
+			if err == nil && next == '=' {
+				l.pos.Column++
+				return l.pos, tokens.GTOE, ">="
+			}
+			l.backup()
+			return l.pos, tokens.GT, ">"
+		case '"':
+			startPos := l.pos
+			lit := l.lexString()
+			return startPos, tokens.STRING, lit
 		default:
 			if unicode.IsSpace(r) {
 				continue
@@ -88,6 +122,12 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 					return startPos, tokens.INT, lit
 				case "string":
 					return startPos, tokens.STRING, lit
+				case "for":
+					return startPos, tokens.FOR, lit
+				case "while":
+					return startPos, tokens.WHILE, lit
+				case "if":
+					return startPos, tokens.IF, lit
 				default:
 					return startPos, tokens.IDENT, lit
 				}
@@ -149,4 +189,20 @@ func (l *Lexer) lexIdent() string {
 			return lit
 		}
 	}
+}
+
+func (l *Lexer) lexString() string {
+	var lit string
+	for {
+		r, _, err := l.reader.ReadRune()
+		if err != nil {
+			panic("unterminated string literal")
+		}
+		l.pos.Column++
+		if r == '"' {
+			break
+		}
+		lit += string(r)
+	}
+	return lit
 }

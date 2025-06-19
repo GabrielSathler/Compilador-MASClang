@@ -29,6 +29,9 @@ const (
 	GTOE
 	AND
 	OR
+	NOT
+	XOR
+	REM
 
 	SEMI
 	LPAREN
@@ -75,6 +78,9 @@ var tokens = []string{
 	GTOE:   ">=",
 	AND:    "&&",
 	OR:     "||",
+	NOT:    "!",
+	XOR:    "^",
+	REM:    "%",
 
 	SEMI:   ";",
 	LPAREN: "(",

@@ -24,5 +24,4 @@ func main() {
 	}()
 
 	p.ParseProgram()
-	fmt.Println("parsing finalizado")
 }
