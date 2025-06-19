@@ -307,11 +307,12 @@ func (p *Parser) parseFactor() {
 	case tokens.IDENT:
 		p.advance()
 
-		if p.currToken == tokens.LPAREN {
+		switch p.currToken {
+		case tokens.LPAREN:
 			p.advance()
 			p.parseArguments()
 			p.expect(tokens.RPAREN)
-		} else if p.currToken == tokens.ASSIGN {
+		case tokens.ASSIGN:
 			panic(fmt.Sprintf("unexpected assignment operator in factor at %v", p.pos))
 		}
 	default:
