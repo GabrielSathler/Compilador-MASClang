@@ -32,6 +32,7 @@ const (
 	NOT
 	XOR
 	REM
+	DOT
 
 	SEMI
 	LPAREN
@@ -99,6 +100,7 @@ var tokens = []string{
 	RETURN: "return",
 	PRINT:  "print",
 	INPUT:  "input",
+	DOT:    ".",
 }
 
 func (t Token) String() string {

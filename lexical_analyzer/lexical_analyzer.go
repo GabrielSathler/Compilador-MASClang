@@ -32,6 +32,7 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 			if err == io.EOF {
 				return l.pos, tokens.EOF, ""
 			}
+
 			panic(err)
 		}
 
@@ -64,41 +65,59 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 			return l.pos, tokens.DIV, "/"
 		case '=':
 			next, _, err := l.reader.ReadRune()
+
 			if err == nil && next == '=' {
 				l.pos.Column++
 				return l.pos, tokens.EQUAL, "=="
 			}
+
 			l.backup()
 			return l.pos, tokens.ASSIGN, "="
 		case '!':
 			next, _, err := l.reader.ReadRune()
+
 			if err == nil && next == '=' {
 				l.pos.Column++
 				return l.pos, tokens.NEQUAL, "!="
 			}
+
 			l.backup()
 			return l.pos, tokens.NOT, "!"
 		case '<':
 			next, _, err := l.reader.ReadRune()
+
 			if err == nil && next == '=' {
 				l.pos.Column++
 				return l.pos, tokens.LTOE, "<="
 			}
+
 			l.backup()
 			return l.pos, tokens.LT, "<"
 		case '>':
 			next, _, err := l.reader.ReadRune()
+
 			if err == nil && next == '=' {
 				l.pos.Column++
 				return l.pos, tokens.GTOE, ">="
 			}
+
 			l.backup()
 			return l.pos, tokens.GT, ">"
 		case '"':
 			startPos := l.pos
 			lit := l.lexString()
 			return startPos, tokens.STRING, lit
+		case '\'':
+			startPos := l.pos
+			lit := l.lexChar()
+			return startPos, tokens.CHAR, lit
 		default:
+			if r == '_' {
+				startPos := l.pos
+				lit := l.lexIdentWithUnderscore()
+				return startPos, tokens.IDENT, lit
+			}
+
 			if unicode.IsSpace(r) {
 				continue
 			} else if unicode.IsDigit(r) {
@@ -120,6 +139,12 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 					return startPos, tokens.RETURN, lit
 				case "int":
 					return startPos, tokens.INT, lit
+				case "float":
+					return startPos, tokens.FLOAT, lit
+				case "char":
+					return startPos, tokens.CHAR, lit
+				case "bool":
+					return startPos, tokens.BOOL, lit
 				case "string":
 					return startPos, tokens.STRING, lit
 				case "for":
@@ -128,9 +153,23 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 					return startPos, tokens.WHILE, lit
 				case "if":
 					return startPos, tokens.IF, lit
+				case "else":
+					return startPos, tokens.ELSE, lit
+				case "true":
+					return startPos, tokens.TRUE, lit
+				case "false":
+					return startPos, tokens.FALSE, lit
+				case "print":
+					return startPos, tokens.PRINT, lit
+				case "input":
+					return startPos, tokens.INPUT, lit
 				default:
 					return startPos, tokens.IDENT, lit
 				}
+			} else if r == '%' {
+				return l.pos, tokens.REM, "%"
+			} else if r == '.' {
+				return l.pos, tokens.DOT, "."
 			} else {
 				return l.pos, tokens.ILLEGAL, string(r)
 			}
@@ -155,6 +194,7 @@ func (l *Lexer) lexInt() string {
 	var lit string
 	for {
 		r, _, err := l.reader.ReadRune()
+
 		if err != nil {
 			if err == io.EOF {
 				return lit
@@ -162,6 +202,7 @@ func (l *Lexer) lexInt() string {
 		}
 
 		l.pos.Column++
+
 		if unicode.IsDigit(r) {
 			lit = lit + string(r)
 		} else {
@@ -175,6 +216,7 @@ func (l *Lexer) lexIdent() string {
 	var lit string
 	for {
 		r, _, err := l.reader.ReadRune()
+
 		if err != nil {
 			if err == io.EOF {
 				return lit
@@ -182,7 +224,30 @@ func (l *Lexer) lexIdent() string {
 		}
 
 		l.pos.Column++
-		if unicode.IsLetter(r) {
+
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			lit = lit + string(r)
+		} else {
+			l.backup()
+			return lit
+		}
+	}
+}
+
+func (l *Lexer) lexIdentWithUnderscore() string {
+	var lit string
+	for {
+		r, _, err := l.reader.ReadRune()
+
+		if err != nil {
+			if err == io.EOF {
+				return lit
+			}
+		}
+
+		l.pos.Column++
+
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
 			lit = lit + string(r)
 		} else {
 			l.backup()
@@ -193,16 +258,45 @@ func (l *Lexer) lexIdent() string {
 
 func (l *Lexer) lexString() string {
 	var lit string
+
 	for {
 		r, _, err := l.reader.ReadRune()
+
 		if err != nil {
 			panic("unterminated string literal")
 		}
 		l.pos.Column++
+
 		if r == '"' {
 			break
 		}
+
 		lit += string(r)
 	}
+	return lit
+}
+
+func (l *Lexer) lexChar() string {
+	r, _, err := l.reader.ReadRune()
+
+	if err != nil {
+		panic("unterminated char literal")
+	}
+
+	l.pos.Column++
+
+	if r == '\'' {
+		panic("empty char literal")
+	}
+
+	lit := string(r)
+	r2, _, err := l.reader.ReadRune()
+
+	if err != nil || r2 != '\'' {
+		panic("unterminated or invalid char literal")
+	}
+
+	l.pos.Column++
+
 	return lit
 }

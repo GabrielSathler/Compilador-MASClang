@@ -261,6 +261,7 @@ func (p *Parser) parseFor() {
 func (p *Parser) parseArguments() {
 	for p.currToken != tokens.RPAREN {
 		p.parseAdditive()
+
 		if p.currToken == tokens.COMMA {
 			p.advance()
 		}
@@ -285,7 +286,7 @@ func (p *Parser) parseComparison() {
 func (p *Parser) parseAdditive() {
 	p.parseMultiplicative()
 
-	for p.currToken == tokens.ADD || p.currToken == tokens.SUB {
+	for p.currToken == tokens.ADD || p.currToken == tokens.SUB || p.currToken == tokens.DOT {
 		p.advance()
 		p.parseMultiplicative()
 	}
@@ -294,7 +295,7 @@ func (p *Parser) parseAdditive() {
 func (p *Parser) parseMultiplicative() {
 	p.parseFactor()
 
-	for p.currToken == tokens.MUL || p.currToken == tokens.DIV {
+	for p.currToken == tokens.MUL || p.currToken == tokens.DIV || p.currToken == tokens.REM {
 		p.advance()
 		p.parseFactor()
 	}
@@ -302,7 +303,7 @@ func (p *Parser) parseMultiplicative() {
 
 func (p *Parser) parseFactor() {
 	switch p.currToken {
-	case tokens.INT, tokens.STRING, tokens.FLOAT, tokens.CHAR, tokens.BOOL:
+	case tokens.INT, tokens.STRING, tokens.FLOAT, tokens.CHAR, tokens.BOOL, tokens.TRUE, tokens.FALSE:
 		p.advance()
 	case tokens.IDENT:
 		p.advance()
