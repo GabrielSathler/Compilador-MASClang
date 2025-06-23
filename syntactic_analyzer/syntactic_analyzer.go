@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/GabrielSathler/Compilador-MASClang/ast"
 	"github.com/GabrielSathler/Compilador-MASClang/lexical_analyzer"
 	"github.com/GabrielSathler/Compilador-MASClang/tokens"
 )
@@ -48,7 +49,9 @@ func isValidType(t tokens.Token) bool {
 	return t == tokens.INT || t == tokens.STRING || t == tokens.FLOAT || t == tokens.CHAR || t == tokens.BOOL
 }
 
-func (p *Parser) ParseProgram() {
+func (p *Parser) ParseProgram() *ast.Program {
+	program := &ast.Program{Decls: []ast.Node{}}
+
 	for p.currToken != tokens.EOF {
 		switch p.currToken {
 		case tokens.FUNC:
@@ -71,6 +74,8 @@ func (p *Parser) ParseProgram() {
 			panic(fmt.Sprintf("unexpected token %v at %v", p.currToken, p.pos))
 		}
 	}
+
+	return program
 }
 
 func (p *Parser) parseStatement() {
