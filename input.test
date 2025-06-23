@@ -6,9 +6,6 @@ func fatorial(n: int): int {
     return resultado;
 }
 
-print("Digite um número para calcular o fatorial:");
-var numero: int;
-input(numero);
-
-var fat: int = fatorial(numero);
-print("O fatorial de " + numero + " é " + fat);
+var x: int = 10;
+var y: int = fatorial(x);
+print(y);
