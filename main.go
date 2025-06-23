@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/GabrielSathler/Compilador-MASClang/lexical_analyzer"
-	"github.com/GabrielSathler/Compilador-MASClang/tokens"
+	"github.com/GabrielSathler/Compilador-MASClang/syntactic_analyzer"
 )
 
 func main() {
@@ -14,13 +13,15 @@ func main() {
 		panic(err)
 	}
 
-	lexer := lexical_analyzer.NewLexer(file)
-	for {
-		pos, tok, lit := lexer.Lex()
-		if tok == tokens.EOF {
-			break
-		}
+	defer file.Close()
 
-		fmt.Printf("%d:%d\t%s\t%s\n", pos.Line, pos.Column, tok, lit)
-	}
+	p := syntactic_analyzer.NewParser(file)
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("error parsing: %v\n", r)
+		}
+	}()
+
+	p.ParseProgram()
 }

@@ -12,12 +12,27 @@ const (
 	CHAR
 	BOOL
 	STRING
+	TRUE
+	FALSE
 
 	ASSIGN
 	ADD
 	SUB
 	MUL
 	DIV
+
+	EQUAL
+	NEQUAL
+	LT
+	LTOE
+	GT
+	GTOE
+	AND
+	OR
+	NOT
+	XOR
+	REM
+	DOT
 
 	SEMI
 	LPAREN
@@ -43,17 +58,30 @@ var tokens = []string{
 	ILLEGAL: "ILLEGAL",
 
 	IDENT:  "IDENT",
-	INT:    "INT",
-	FLOAT:  "FLOAT",
-	CHAR:   "CHAR",
-	BOOL:   "BOOL",
-	STRING: "STRING",
+	INT:    "int",
+	FLOAT:  "float",
+	CHAR:   "char",
+	BOOL:   "bool",
+	STRING: "string",
+	TRUE:   "true",
+	FALSE:  "false",
 
 	ASSIGN: "=",
 	ADD:    "+",
 	SUB:    "-",
 	MUL:    "*",
 	DIV:    "/",
+	EQUAL:  "==",
+	NEQUAL: "!=",
+	LT:     "<",
+	LTOE:   "<=",
+	GT:     ">",
+	GTOE:   ">=",
+	AND:    "&&",
+	OR:     "||",
+	NOT:    "!",
+	XOR:    "^",
+	REM:    "%",
 
 	SEMI:   ";",
 	LPAREN: "(",
@@ -72,6 +100,7 @@ var tokens = []string{
 	RETURN: "return",
 	PRINT:  "print",
 	INPUT:  "input",
+	DOT:    ".",
 }
 
 func (t Token) String() string {
