@@ -27,7 +27,7 @@ func NewLexer(reader io.Reader) *Lexer {
 
 func (l *Lexer) Lex() (Position, tokens.Token, string) {
 	for {
-		r, _, err := l.reader.ReadRune()
+		currentRune, _, err := l.reader.ReadRune()
 		if err != nil {
 			if err == io.EOF {
 				return l.pos, tokens.EOF, ""
@@ -38,7 +38,7 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 
 		l.pos.Column++
 
-		switch r {
+		switch currentRune {
 		case '\n':
 			l.resetPosition()
 		case ';':
@@ -112,20 +112,22 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 			lit := l.lexChar()
 			return startPos, tokens.CHAR, lit
 		default:
-			if r == '_' {
+			if currentRune == '_' {
 				startPos := l.pos
 				lit := l.lexIdentWithUnderscore()
+
 				return startPos, tokens.IDENT, lit
 			}
 
-			if unicode.IsSpace(r) {
+			if unicode.IsSpace(currentRune) {
 				continue
-			} else if unicode.IsDigit(r) {
+			} else if unicode.IsDigit(currentRune) {
 				startPos := l.pos
 				l.backup()
-				lit := l.lexInt()
-				return startPos, tokens.INT, lit
-			} else if unicode.IsLetter(r) {
+				lit, tokenType := l.lexNumber()
+
+				return startPos, tokenType, lit
+			} else if unicode.IsLetter(currentRune) {
 				startPos := l.pos
 				l.backup()
 				lit := l.lexIdent()
@@ -166,12 +168,12 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 				default:
 					return startPos, tokens.IDENT, lit
 				}
-			} else if r == '%' {
+			} else if currentRune == '%' {
 				return l.pos, tokens.REM, "%"
-			} else if r == '.' {
+			} else if currentRune == '.' {
 				return l.pos, tokens.DOT, "."
 			} else {
-				return l.pos, tokens.ILLEGAL, string(r)
+				return l.pos, tokens.ILLEGAL, string(currentRune)
 			}
 		}
 	}
@@ -190,33 +192,54 @@ func (l *Lexer) backup() {
 	l.pos.Column--
 }
 
-func (l *Lexer) lexInt() string {
+func (l *Lexer) lexNumber() (string, tokens.Token) {
 	var lit string
-	for {
-		r, _, err := l.reader.ReadRune()
+	isFloat := false
 
+	for {
+		currentRune, _, err := l.reader.ReadRune()
 		if err != nil {
 			if err == io.EOF {
-				return lit
+				return lit, tokens.INT
 			}
 		}
 
-		l.pos.Column++
+		if unicode.IsDigit(currentRune) {
+			lit += string(currentRune)
+		} else if currentRune == '.' && !isFloat {
+			isFloat = true
+			lit += string(currentRune)
 
-		if unicode.IsDigit(r) {
-			lit = lit + string(r)
+			nextRune, _, err := l.reader.ReadRune()
+			if err != nil {
+				if err == io.EOF {
+					return lit, tokens.ILLEGAL
+				}
+			}
+
+			if !unicode.IsDigit(nextRune) {
+				l.backup()
+				return lit, tokens.ILLEGAL
+			}
+
+			lit += string(nextRune)
 		} else {
 			l.backup()
-			return lit
+
+			if isFloat {
+				return lit, tokens.FLOAT
+			}
+
+			return lit, tokens.INT
 		}
 	}
 }
 
 func (l *Lexer) lexIdent() string {
 	var lit string
-	for {
-		r, _, err := l.reader.ReadRune()
 
+	for {
+		currentRune, _, err := l.reader.ReadRune()
 		if err != nil {
 			if err == io.EOF {
 				return lit
@@ -225,8 +248,8 @@ func (l *Lexer) lexIdent() string {
 
 		l.pos.Column++
 
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
-			lit = lit + string(r)
+		if unicode.IsLetter(currentRune) || unicode.IsDigit(currentRune) || currentRune == '_' {
+			lit = lit + string(currentRune)
 		} else {
 			l.backup()
 			return lit
@@ -236,9 +259,9 @@ func (l *Lexer) lexIdent() string {
 
 func (l *Lexer) lexIdentWithUnderscore() string {
 	var lit string
-	for {
-		r, _, err := l.reader.ReadRune()
 
+	for {
+		currentRune, _, err := l.reader.ReadRune()
 		if err != nil {
 			if err == io.EOF {
 				return lit
@@ -247,8 +270,8 @@ func (l *Lexer) lexIdentWithUnderscore() string {
 
 		l.pos.Column++
 
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
-			lit = lit + string(r)
+		if unicode.IsLetter(currentRune) || unicode.IsDigit(currentRune) || currentRune == '_' {
+			lit = lit + string(currentRune)
 		} else {
 			l.backup()
 			return lit
@@ -260,39 +283,38 @@ func (l *Lexer) lexString() string {
 	var lit string
 
 	for {
-		r, _, err := l.reader.ReadRune()
-
+		currentRune, _, err := l.reader.ReadRune()
 		if err != nil {
 			panic("unterminated string literal")
 		}
+
 		l.pos.Column++
 
-		if r == '"' {
+		if currentRune == '"' {
 			break
 		}
 
-		lit += string(r)
+		lit += string(currentRune)
 	}
 	return lit
 }
 
 func (l *Lexer) lexChar() string {
-	r, _, err := l.reader.ReadRune()
-
+	currentRune, _, err := l.reader.ReadRune()
 	if err != nil {
 		panic("unterminated char literal")
 	}
 
 	l.pos.Column++
 
-	if r == '\'' {
+	if currentRune == '\'' {
 		panic("empty char literal")
 	}
 
-	lit := string(r)
-	r2, _, err := l.reader.ReadRune()
+	lit := string(currentRune)
+	nextRune, _, err := l.reader.ReadRune()
 
-	if err != nil || r2 != '\'' {
+	if err != nil || nextRune != '\'' {
 		panic("unterminated or invalid char literal")
 	}
 
