@@ -114,7 +114,7 @@ func (l *Lexer) Lex() (Position, tokens.Token, string) {
 		default:
 			if currentRune == '_' {
 				startPos := l.pos
-				lit := l.lexIdentWithUnderscore()
+				lit := l.lexIdent()
 
 				return startPos, tokens.IDENT, lit
 			}
@@ -236,28 +236,6 @@ func (l *Lexer) lexNumber() (string, tokens.Token) {
 }
 
 func (l *Lexer) lexIdent() string {
-	var lit string
-
-	for {
-		currentRune, _, err := l.reader.ReadRune()
-		if err != nil {
-			if err == io.EOF {
-				return lit
-			}
-		}
-
-		l.pos.Column++
-
-		if unicode.IsLetter(currentRune) || unicode.IsDigit(currentRune) || currentRune == '_' {
-			lit = lit + string(currentRune)
-		} else {
-			l.backup()
-			return lit
-		}
-	}
-}
-
-func (l *Lexer) lexIdentWithUnderscore() string {
 	var lit string
 
 	for {
