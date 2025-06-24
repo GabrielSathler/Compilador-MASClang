@@ -15,7 +15,7 @@ func main() {
 	}
 	defer file.Close()
 
-	p := syntactic_analyzer.NewParser(file)
+	parser := syntactic_analyzer.NewParser(file)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -23,19 +23,18 @@ func main() {
 		}
 	}()
 
-	program := p.ParseProgram()
-	fmt.Printf("Declarações encontradas no programa: %d\n", len(program.Decls))
+	program := parser.ParseProgram()
 
 	analyzer := semantic_analyzer.NewSemanticAnalyzer()
 	analyzer.Analyze(program)
 
-	/*errs := analyzer.Errors()
-	if len(errs) > 0 {
-		fmt.Println("Erros semânticos encontrados:")
-		for _, e := range errs {
-			fmt.Println(" -", e)
+	if errs := analyzer.Errors; len(errs) > 0 {
+		fmt.Println("Semantic errors:")
+
+		for _, err := range errs {
+			fmt.Println(" -", err)
 		}
-	} else {
-		fmt.Println("Análise semântica concluída sem erros!")
-	}*/
+
+		return
+	}
 }
