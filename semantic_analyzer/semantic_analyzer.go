@@ -2,6 +2,7 @@ package semantic_analyzer
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/GabrielSathler/Compilador-MASClang/ast"
 	"github.com/GabrielSathler/Compilador-MASClang/tokens"
@@ -62,7 +63,7 @@ func (s *SemanticAnalyzer) analyzeNode(node ast.Node) {
 			valueType := s.analyzeExpression(n.Value)
 
 			if valueType != varType {
-				s.reportError(fmt.Sprintf("type mismatch in variable '%s': expected %s, got %s", n.Name, varType, valueType))
+				s.reportError(fmt.Sprintf("type mismatch in variable '%s': expected %s, got %s at line %s", n.Name, varType, valueType, strconv.Itoa(n.LineIdent)))
 			}
 		}
 
@@ -70,13 +71,13 @@ func (s *SemanticAnalyzer) analyzeNode(node ast.Node) {
 	case *ast.Assignment:
 		varType, ok := s.lookupVar(n.Name)
 		if !ok {
-			s.reportError(fmt.Sprintf("undeclared variable '%s'", n.Name))
+			s.reportError(fmt.Sprintf("undeclared variable '%s' at line %s", n.Name, strconv.Itoa(n.LineIdent)))
 			return
 		}
 
 		valueType := s.analyzeExpression(n.Value)
 		if varType != valueType {
-			s.reportError(fmt.Sprintf("type mismatch in assignment to '%s': expected %s, got %s", n.Name, varType, valueType))
+			s.reportError(fmt.Sprintf("type mismatch in assignment to '%s': expected %s, got %s at line %s", n.Name, varType, valueType, strconv.Itoa(n.LineIdent)))
 		}
 	case *ast.Return:
 		if n.Value != nil {
@@ -85,7 +86,7 @@ func (s *SemanticAnalyzer) analyzeNode(node ast.Node) {
 	case *ast.If:
 		condition := s.analyzeExpression(n.Condition)
 		if condition != "bool" {
-			s.reportError("condition in if statement must be boolean")
+			s.reportError(fmt.Sprintf("condition in if statement must be boolean at line %s", strconv.Itoa(n.LineIdent)))
 		}
 
 		s.analyzeNode(n.ThenBlock)
@@ -95,7 +96,7 @@ func (s *SemanticAnalyzer) analyzeNode(node ast.Node) {
 	case *ast.While:
 		condition := s.analyzeExpression(n.Condition)
 		if condition != "bool" {
-			s.reportError("condition in while must be boolean")
+			s.reportError(fmt.Sprintf("condition in while must be boolean at line %s", strconv.Itoa(n.LineIdent)))
 		}
 
 		s.analyzeNode(n.Body)
@@ -106,7 +107,7 @@ func (s *SemanticAnalyzer) analyzeNode(node ast.Node) {
 
 		condition := s.analyzeExpression(n.Condition)
 		if condition != "bool" {
-			s.reportError("condition in for must be boolean")
+			s.reportError(fmt.Sprintf("condition in for must be boolean at line %s", strconv.Itoa(n.LineIdent)))
 		}
 
 		s.analyzeNode(n.Increment)
@@ -117,7 +118,7 @@ func (s *SemanticAnalyzer) analyzeNode(node ast.Node) {
 	case *ast.Input:
 		_, ok := s.lookupVar(n.Value)
 		if !ok {
-			s.reportError(fmt.Sprintf("undeclared variable '%s' in input", n.Value))
+			s.reportError(fmt.Sprintf("undeclared variable '%s' in input at line %s", n.Value, strconv.Itoa(n.LineIdent)))
 		}
 	}
 }
@@ -137,8 +138,8 @@ func (s *SemanticAnalyzer) lookupVar(name string) (string, bool) {
 	return "", false
 }
 
-func (s *SemanticAnalyzer) analyzeExpression(expr ast.Expression) string {
-	switch e := expr.(type) {
+func (s *SemanticAnalyzer) analyzeExpression(expression ast.Expression) string {
+	switch e := expression.(type) {
 	case *ast.IntLiteral:
 		return "int"
 	case *ast.FloatLiteral:
@@ -153,7 +154,7 @@ func (s *SemanticAnalyzer) analyzeExpression(expr ast.Expression) string {
 		varType, ok := s.lookupVar(e.Name)
 
 		if !ok {
-			s.reportError(fmt.Sprintf("undeclared variable '%s'", e.Name))
+			s.reportError(fmt.Sprintf("undeclared variable '%s' at line %s", e.Name, strconv.Itoa(e.LineIdent)))
 			return "unknown"
 		}
 
@@ -164,11 +165,11 @@ func (s *SemanticAnalyzer) analyzeExpression(expr ast.Expression) string {
 
 		if isArithmeticOperation(e.Operation) {
 			if leftType != "int" && leftType != "float" {
-				s.reportError(fmt.Sprintf("invalid left operand type %s for arithmetic operator", leftType))
+				s.reportError(fmt.Sprintf("invalid left operand type %s for arithmetic operator at line %s", leftType, strconv.Itoa(e.LineIdent)))
 			}
 
 			if rightType != leftType {
-				s.reportError(fmt.Sprintf("type mismatch in binary expression: %s vs %s", leftType, rightType))
+				s.reportError(fmt.Sprintf("type mismatch in binary expression: %s vs %s at line %s", leftType, rightType, strconv.Itoa(e.LineIdent)))
 			}
 
 			return leftType
@@ -176,7 +177,7 @@ func (s *SemanticAnalyzer) analyzeExpression(expr ast.Expression) string {
 
 		if isComparisonOperation(e.Operation) {
 			if leftType != rightType {
-				s.reportError(fmt.Sprintf("type mismatch in comparison: %s vs %s", leftType, rightType))
+				s.reportError(fmt.Sprintf("type mismatch in comparison: %s vs %s at line %s", leftType, rightType, strconv.Itoa(e.LineIdent)))
 			}
 
 			return "bool"
@@ -184,24 +185,24 @@ func (s *SemanticAnalyzer) analyzeExpression(expr ast.Expression) string {
 
 		if e.Operation == tokens.DOT {
 			if leftType != "string" && rightType != "string" {
-				s.reportError("both operands of '.' must be string")
+				s.reportError(fmt.Sprintf("both operands of '.' must be string at line %s", strconv.Itoa(e.LineIdent)))
 			}
 
 			return "string"
 		}
 
-		s.reportError("unknown binary operator")
+		s.reportError(fmt.Sprintf("unknown binary operator at line %s", strconv.Itoa(e.LineIdent)))
 
 		return "unknown"
 	case *ast.FuncCall:
 		fn, ok := s.funcs[e.Name]
 		if !ok {
-			s.reportError(fmt.Sprintf("undefined function '%s'", e.Name))
+			s.reportError(fmt.Sprintf("undefined function '%s' at line %s", e.Name, strconv.Itoa(e.LineIdent)))
 			return "unknown"
 		}
 
 		if len(fn.Params) != len(e.Arguments) {
-			s.reportError(fmt.Sprintf("argument count mismatch in function '%s'", e.Name))
+			s.reportError(fmt.Sprintf("argument count mismatch in function '%s' at line %s", e.Name, strconv.Itoa(e.LineIdent)))
 		} else {
 			for i, param := range fn.Params {
 				argumentType := s.analyzeExpression(e.Arguments[i])
@@ -209,11 +210,12 @@ func (s *SemanticAnalyzer) analyzeExpression(expr ast.Expression) string {
 
 				if argumentType != paramType {
 					s.reportError(fmt.Sprintf(
-						"type mismatch in argument %d of function '%s': expected %s, got %s",
+						"type mismatch in argument %d of function '%s': expected %s, got %s at line %s",
 						i+1,
 						e.Name,
 						paramType,
 						argumentType,
+						strconv.Itoa(e.LineIdent),
 					))
 				}
 			}
@@ -221,7 +223,7 @@ func (s *SemanticAnalyzer) analyzeExpression(expr ast.Expression) string {
 
 		return tokens.Token(fn.ReturnType).String()
 	default:
-		s.reportError("unknown expression type")
+		s.reportError(fmt.Sprintf("unknown expression type at line %s", strconv.Itoa(expression.Line())))
 		return "unknown"
 	}
 }

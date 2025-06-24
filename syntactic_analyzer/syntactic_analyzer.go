@@ -45,6 +45,8 @@ func (p *Parser) parseBlock() *ast.CodeBlock {
 	p.expect(tokens.LBRACE)
 	statements := []ast.Node{}
 
+	line := p.pos.Line
+
 	for p.currToken != tokens.RBRACE && p.currToken != tokens.EOF {
 		statement := p.parseStatement()
 
@@ -55,7 +57,7 @@ func (p *Parser) parseBlock() *ast.CodeBlock {
 
 	p.expect(tokens.RBRACE)
 
-	return &ast.CodeBlock{Statements: statements}
+	return &ast.CodeBlock{Statements: statements, LineIdent: line}
 }
 
 func (p *Parser) ParseProgram() *ast.Program {
@@ -102,6 +104,7 @@ func (p *Parser) parseFunction() *ast.Function {
 	p.expect(tokens.FUNC)
 
 	name := p.currLex
+	line := p.pos.Line
 
 	p.expect(tokens.IDENT)
 	p.expect(tokens.LPAREN)
@@ -116,7 +119,7 @@ func (p *Parser) parseFunction() *ast.Function {
 	p.advance()
 	body := p.parseBlock()
 
-	return &ast.Function{Name: name, Params: params, ReturnType: returnType, Body: body}
+	return &ast.Function{Name: name, Params: params, ReturnType: returnType, Body: body, LineIdent: line}
 }
 
 func (p *Parser) parseFunctionParameters() []ast.Param {
@@ -168,6 +171,7 @@ func (p *Parser) parseIf() ast.Node {
 	p.expect(tokens.IF)
 	p.expect(tokens.LPAREN)
 
+	line := p.pos.Line
 	condition := p.parseComparison()
 
 	p.expect(tokens.RPAREN)
@@ -180,7 +184,7 @@ func (p *Parser) parseIf() ast.Node {
 		elseBlock = p.parseBlock()
 	}
 
-	return &ast.If{Condition: condition, ThenBlock: thenBlock, ElseBlock: elseBlock}
+	return &ast.If{Condition: condition, ThenBlock: thenBlock, ElseBlock: elseBlock, LineIdent: line}
 }
 
 func (p *Parser) parseVar() *ast.Var {
@@ -191,6 +195,7 @@ func (p *Parser) parseVar() *ast.Var {
 	}
 
 	name := p.currLex
+	line := p.pos.Line
 	p.advance()
 
 	p.expect(tokens.COLON)
@@ -210,7 +215,7 @@ func (p *Parser) parseVar() *ast.Var {
 
 	p.expect(tokens.SEMI)
 
-	return &ast.Var{Name: name, Type: typeTok, Value: value}
+	return &ast.Var{Name: name, Type: typeTok, Value: value, LineIdent: line}
 }
 
 func (p *Parser) parseFor() ast.Node {
@@ -224,6 +229,7 @@ func (p *Parser) parseFor() ast.Node {
 		init = p.parseAssignmentOrFuncCall(true)
 	}
 
+	line := p.pos.Line
 	condition := p.parseComparison()
 
 	p.expect(tokens.SEMI)
@@ -233,48 +239,52 @@ func (p *Parser) parseFor() ast.Node {
 	p.expect(tokens.RPAREN)
 
 	body := p.parseBlock()
-	return &ast.For{Init: init, Condition: condition, Increment: post, Body: body}
+	return &ast.For{Init: init, Condition: condition, Increment: post, Body: body, LineIdent: line}
 }
 
 func (p *Parser) parseWhile() ast.Node {
 	p.expect(tokens.WHILE)
 	p.expect(tokens.LPAREN)
 
+	line := p.pos.Line
 	condition := p.parseComparison()
 
 	p.expect(tokens.RPAREN)
 
 	body := p.parseBlock()
-	return &ast.While{Condition: condition, Body: body}
+	return &ast.While{Condition: condition, Body: body, LineIdent: line}
 }
 
 func (p *Parser) parsePrint() ast.Node {
 	p.expect(tokens.PRINT)
 	p.expect(tokens.LPAREN)
 
+	line := p.pos.Line
 	value := p.parseAdditive()
 
 	p.expect(tokens.RPAREN)
 	p.expect(tokens.SEMI)
 
-	return &ast.Print{Value: value}
+	return &ast.Print{Value: value, LineIdent: line}
 }
 
 func (p *Parser) parseInput() ast.Node {
 	p.expect(tokens.INPUT)
 	p.expect(tokens.LPAREN)
 
+	line := p.pos.Line
 	value := p.currLex
 
 	p.expect(tokens.IDENT)
 	p.expect(tokens.RPAREN)
 	p.expect(tokens.SEMI)
 
-	return &ast.Input{Value: value}
+	return &ast.Input{Value: value, LineIdent: line}
 }
 
 func (p *Parser) parseReturn() ast.Node {
 	p.expect(tokens.RETURN)
+	line := p.pos.Line
 
 	var value ast.Expression = nil
 	if p.currToken != tokens.SEMI {
@@ -283,7 +293,7 @@ func (p *Parser) parseReturn() ast.Node {
 
 	p.expect(tokens.SEMI)
 
-	return &ast.Return{Value: value}
+	return &ast.Return{Value: value, LineIdent: line}
 }
 
 func (p *Parser) parseAssignmentOrFuncCall(requireSemi bool) ast.Node {
@@ -291,6 +301,7 @@ func (p *Parser) parseAssignmentOrFuncCall(requireSemi bool) ast.Node {
 		panic(fmt.Sprintf("expected identifier, got %v at %v", p.currToken, p.pos))
 	}
 
+	line := p.pos.Line
 	name := p.currLex
 	p.advance()
 
@@ -307,7 +318,7 @@ func (p *Parser) parseAssignmentOrFuncCall(requireSemi bool) ast.Node {
 			p.advance()
 		}
 
-		return &ast.Assign{Name: name, Value: value}
+		return &ast.Assign{Name: name, Value: value, LineIdent: line}
 	case tokens.LPAREN:
 		p.advance()
 		arguments := []ast.Expression{}
@@ -332,7 +343,7 @@ func (p *Parser) parseAssignmentOrFuncCall(requireSemi bool) ast.Node {
 			p.expect(tokens.SEMI)
 		}
 
-		return &ast.FuncCall{Name: name, Arguments: arguments}
+		return &ast.FuncCall{Name: name, Arguments: arguments, LineIdent: p.pos.Line}
 	default:
 		panic(fmt.Sprintf("unexpected token after identifier %v at %v", p.currToken, p.pos))
 	}
@@ -344,11 +355,12 @@ func (p *Parser) parseComparison() ast.Expression {
 	for p.currToken == tokens.EQUAL || p.currToken == tokens.NEQUAL ||
 		p.currToken == tokens.LT || p.currToken == tokens.LTOE ||
 		p.currToken == tokens.GT || p.currToken == tokens.GTOE {
+		line := p.pos.Line
 		operation := p.currToken
 		p.advance()
 
 		right := p.parseAdditive()
-		left = &ast.BinaryExpression{Left: left, Operation: operation, Right: right}
+		left = &ast.BinaryExpression{Left: left, Operation: operation, Right: right, LineIdent: line}
 	}
 
 	return left
@@ -358,11 +370,12 @@ func (p *Parser) parseAdditive() ast.Expression {
 	left := p.parseMultiplicative()
 
 	for p.currToken == tokens.ADD || p.currToken == tokens.SUB || p.currToken == tokens.DOT {
+		line := p.pos.Line
 		operation := p.currToken
 		p.advance()
 
 		right := p.parseMultiplicative()
-		left = &ast.BinaryExpression{Left: left, Operation: operation, Right: right}
+		left = &ast.BinaryExpression{Left: left, Operation: operation, Right: right, LineIdent: line}
 	}
 
 	return left
@@ -372,11 +385,12 @@ func (p *Parser) parseMultiplicative() ast.Expression {
 	left := p.parseFactor()
 
 	for p.currToken == tokens.MUL || p.currToken == tokens.DIV || p.currToken == tokens.REM {
+		line := p.pos.Line
 		operation := p.currToken
 		p.advance()
 
 		right := p.parseFactor()
-		left = &ast.BinaryExpression{Left: left, Operation: operation, Right: right}
+		left = &ast.BinaryExpression{Left: left, Operation: operation, Right: right, LineIdent: line}
 	}
 
 	return left
@@ -385,6 +399,7 @@ func (p *Parser) parseMultiplicative() ast.Expression {
 func (p *Parser) parseFactor() ast.Expression {
 	switch p.currToken {
 	case tokens.INT:
+		line := p.pos.Line
 		stringValue := p.currLex
 		p.advance()
 
@@ -394,24 +409,27 @@ func (p *Parser) parseFactor() ast.Expression {
 			panic(fmt.Sprintf("invalid integer literal: %v", stringValue))
 		}
 
-		return &ast.IntLiteral{Value: value}
+		return &ast.IntLiteral{Value: value, LineIdent: line}
 	case tokens.STRING:
+		line := p.pos.Line
 		value := p.currLex
 		p.advance()
 
-		return &ast.StringLiteral{Value: value}
+		return &ast.StringLiteral{Value: value, LineIdent: line}
 	case tokens.CHAR:
-		val := p.currLex
+		line := p.pos.Line
+		value := p.currLex
 		p.advance()
 
-		if len(val) == 3 && val[0] == '\'' && val[2] == '\'' {
-			return &ast.CharLiteral{Value: rune(val[1])}
-		} else if len(val) == 1 {
-			return &ast.CharLiteral{Value: rune(val[0])}
+		if len(value) == 3 && value[0] == '\'' && value[2] == '\'' {
+			return &ast.CharLiteral{Value: rune(value[1]), LineIdent: line}
+		} else if len(value) == 1 {
+			return &ast.CharLiteral{Value: rune(value[0]), LineIdent: line}
 		} else {
-			panic(fmt.Sprintf("invalid char literal: %v", val))
+			panic(fmt.Sprintf("invalid char literal: %v", value))
 		}
 	case tokens.FLOAT:
+		line := p.pos.Line
 		stringValue := p.currLex
 		p.advance()
 
@@ -420,13 +438,15 @@ func (p *Parser) parseFactor() ast.Expression {
 			panic(fmt.Sprintf("invalid float literal: %v", stringValue))
 		}
 
-		return &ast.FloatLiteral{Value: value}
+		return &ast.FloatLiteral{Value: value, LineIdent: line}
 	case tokens.TRUE, tokens.FALSE:
+		line := p.pos.Line
 		value := (p.currToken == tokens.TRUE)
 		p.advance()
 
-		return &ast.BoolLiteral{Value: value}
+		return &ast.BoolLiteral{Value: value, LineIdent: line}
 	case tokens.IDENT:
+		line := p.pos.Line
 		name := p.currLex
 		p.advance()
 
@@ -446,10 +466,10 @@ func (p *Parser) parseFactor() ast.Expression {
 			}
 
 			p.expect(tokens.RPAREN)
-			return &ast.FuncCall{Name: name, Arguments: arguments}
+			return &ast.FuncCall{Name: name, Arguments: arguments, LineIdent: line}
 		}
 
-		return &ast.Ident{Name: name}
+		return &ast.Ident{Name: name, LineIdent: line}
 	default:
 		panic(fmt.Sprintf("unexpected token %v at %v", p.currToken, p.pos))
 	}
