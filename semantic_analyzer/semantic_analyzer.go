@@ -8,246 +8,234 @@ import (
 )
 
 type SemanticAnalyzer struct {
-	errors []string
+	Errors []string
 	scopes []map[string]string
 	funcs  map[string]*ast.Function
 }
 
 func NewSemanticAnalyzer() *SemanticAnalyzer {
 	return &SemanticAnalyzer{
-		errors: []string{},
-		scopes: []map[string]string{{}}, // escopo global
+		Errors: []string{},
+		scopes: []map[string]string{{}},
 		funcs:  map[string]*ast.Function{},
 	}
 }
-
-// ====== APIs externas ======
 
 func (s *SemanticAnalyzer) Analyze(node ast.Node) {
 	s.analyzeNode(node)
 }
 
-func (s *SemanticAnalyzer) Errors() []string {
-	return s.errors
-}
-
-// ====== Controle de escopo ======
-
-func (s *SemanticAnalyzer) pushScope() {
-	s.scopes = append(s.scopes, map[string]string{})
-}
-
-func (s *SemanticAnalyzer) popScope() {
-	s.scopes = s.scopes[:len(s.scopes)-1]
-}
-
-func (s *SemanticAnalyzer) declareVar(name, typ string) {
-	current := s.scopes[len(s.scopes)-1]
-	current[name] = typ
-}
-
-func (s *SemanticAnalyzer) lookupVar(name string) (string, bool) {
-	for i := len(s.scopes) - 1; i >= 0; i-- {
-		if typ, ok := s.scopes[i][name]; ok {
-			return typ, true
-		}
-	}
-	return "", false
-}
-
-// ====== Análise de nós ======
-
 func (s *SemanticAnalyzer) analyzeNode(node ast.Node) {
 	switch n := node.(type) {
 	case *ast.Program:
-		for _, decl := range n.Decls {
-			if fn, ok := decl.(*ast.Function); ok {
-				s.funcs[fn.Name] = fn
+		for _, declaration := range n.Declarations {
+			if function, ok := declaration.(*ast.Function); ok {
+				s.funcs[function.Name] = function
 			}
 		}
-		for _, decl := range n.Decls {
-			s.analyzeNode(decl)
-		}
 
+		for _, declaration := range n.Declarations {
+			s.analyzeNode(declaration)
+		}
 	case *ast.Function:
-		s.pushScope()
+		s.scopes = append(s.scopes, map[string]string{})
+
 		for _, param := range n.Params {
 			s.declareVar(param.Name, tokens.Token(param.Type).String())
 		}
-		s.analyzeNode(n.Body)
-		s.popScope()
 
+		s.analyzeNode(n.Body)
+
+		s.scopes = s.scopes[:len(s.scopes)-1]
 	case *ast.CodeBlock:
-		s.pushScope()
-		for _, stmt := range n.Stmts {
+		s.scopes = append(s.scopes, map[string]string{})
+
+		for _, stmt := range n.Statements {
 			s.analyzeNode(stmt)
 		}
-		s.popScope()
 
+		s.scopes = s.scopes[:len(s.scopes)-1]
 	case *ast.Var:
-		typ := tokens.Token(n.Type).String()
+		varType := tokens.Token(n.Type).String()
+
 		if n.Value != nil {
-			valType := s.analyzeExpr(n.Value)
-			if valType != typ {
-				s.reportError(fmt.Sprintf("Type mismatch in variable '%s': expected %s, got %s", n.Name, typ, valType))
+			valueType := s.analyzeExpression(n.Value)
+
+			if valueType != varType {
+				s.reportError(fmt.Sprintf("type mismatch in variable '%s': expected %s, got %s", n.Name, varType, valueType))
 			}
 		}
-		s.declareVar(n.Name, typ)
 
+		s.declareVar(n.Name, varType)
 	case *ast.Assignment:
 		varType, ok := s.lookupVar(n.Name)
 		if !ok {
-			s.reportError(fmt.Sprintf("Undeclared variable '%s'", n.Name))
+			s.reportError(fmt.Sprintf("undeclared variable '%s'", n.Name))
 			return
 		}
-		valType := s.analyzeExpr(n.Value)
-		if varType != valType {
-			s.reportError(fmt.Sprintf("Type mismatch in assignment to '%s': expected %s, got %s", n.Name, varType, valType))
-		}
 
+		valueType := s.analyzeExpression(n.Value)
+		if varType != valueType {
+			s.reportError(fmt.Sprintf("type mismatch in assignment to '%s': expected %s, got %s", n.Name, varType, valueType))
+		}
 	case *ast.Return:
 		if n.Value != nil {
-			s.analyzeExpr(n.Value)
+			s.analyzeExpression(n.Value)
+		}
+	case *ast.If:
+		condition := s.analyzeExpression(n.Condition)
+		if condition != "bool" {
+			s.reportError("condition in if statement must be boolean")
 		}
 
-	case *ast.If:
-		condType := s.analyzeExpr(n.Condition)
-		if condType != "bool" {
-			s.reportError("Condition in if statement must be boolean")
-		}
 		s.analyzeNode(n.ThenBlock)
 		if n.ElseBlock != nil {
 			s.analyzeNode(n.ElseBlock)
 		}
-
 	case *ast.While:
-		condType := s.analyzeExpr(n.Condition)
-		if condType != "bool" {
-			s.reportError("Condition in while must be boolean")
+		condition := s.analyzeExpression(n.Condition)
+		if condition != "bool" {
+			s.reportError("condition in while must be boolean")
 		}
+
 		s.analyzeNode(n.Body)
 
-		/*case *ast.For:
-			s.pushScope()
-			s.analyzeNode(n.Init)
-			condType := s.analyzeExpr(n.Condition)
-			if condType != "bool" {
-				s.reportError("Condition in for must be boolean")
-			}
-			s.analyzeNode(n.Increment)
-			s.analyzeNode(n.Body)
-			s.popScope()
+	case *ast.For:
+		s.scopes = append(s.scopes, map[string]string{})
+		s.analyzeNode(n.Init)
 
-		case *ast.Print:
-			s.analyzeExpr(n.Value)
+		condition := s.analyzeExpression(n.Condition)
+		if condition != "bool" {
+			s.reportError("condition in for must be boolean")
+		}
 
-		case *ast.Input:
-			_, ok := s.lookupVar(n.Name)
-			if !ok {
-				s.reportError(fmt.Sprintf("Undeclared variable '%s' in input", n.Name))
-			}*/
+		s.analyzeNode(n.Increment)
+		s.analyzeNode(n.Body)
+		s.scopes = s.scopes[:len(s.scopes)-1]
+	case *ast.Print:
+		s.analyzeExpression(n.Value)
+	case *ast.Input:
+		_, ok := s.lookupVar(n.Value)
+		if !ok {
+			s.reportError(fmt.Sprintf("undeclared variable '%s' in input", n.Value))
+		}
 	}
 }
 
-// ====== Análise de expressões ======
+func (s *SemanticAnalyzer) declareVar(name, varType string) {
+	current := s.scopes[len(s.scopes)-1]
+	current[name] = varType
+}
 
-func (s *SemanticAnalyzer) analyzeExpr(expr ast.Expr) string {
+func (s *SemanticAnalyzer) lookupVar(name string) (string, bool) {
+	for i := len(s.scopes) - 1; i >= 0; i-- {
+		if varType, ok := s.scopes[i][name]; ok {
+			return varType, true
+		}
+	}
+
+	return "", false
+}
+
+func (s *SemanticAnalyzer) analyzeExpression(expr ast.Expression) string {
 	switch e := expr.(type) {
 	case *ast.IntLiteral:
 		return "int"
-
 	case *ast.FloatLiteral:
 		return "float"
-
 	case *ast.StringLiteral:
 		return "string"
-
 	case *ast.CharLiteral:
 		return "char"
-
 	case *ast.BoolLiteral:
 		return "bool"
-
 	case *ast.Ident:
-		typ, ok := s.lookupVar(e.Name)
+		varType, ok := s.lookupVar(e.Name)
+
 		if !ok {
-			s.reportError(fmt.Sprintf("Undeclared variable '%s'", e.Name))
+			s.reportError(fmt.Sprintf("undeclared variable '%s'", e.Name))
 			return "unknown"
 		}
-		return typ
 
-	case *ast.BinaryExpr:
-		leftType := s.analyzeExpr(e.Left)
-		rightType := s.analyzeExpr(e.Right)
+		return varType
+	case *ast.BinaryExpression:
+		leftType := s.analyzeExpression(e.Left)
+		rightType := s.analyzeExpression(e.Right)
 
-		if isArithmeticOp(e.Op) {
+		if isArithmeticOperation(e.Operation) {
 			if leftType != "int" && leftType != "float" {
-				s.reportError(fmt.Sprintf("Invalid left operand type %s for arithmetic operator", leftType))
+				s.reportError(fmt.Sprintf("invalid left operand type %s for arithmetic operator", leftType))
 			}
+
 			if rightType != leftType {
-				s.reportError(fmt.Sprintf("Type mismatch in binary expression: %s vs %s", leftType, rightType))
+				s.reportError(fmt.Sprintf("type mismatch in binary expression: %s vs %s", leftType, rightType))
 			}
+
 			return leftType
 		}
 
-		if isComparisonOp(e.Op) {
+		if isComparisonOperation(e.Operation) {
 			if leftType != rightType {
-				s.reportError(fmt.Sprintf("Type mismatch in comparison: %s vs %s", leftType, rightType))
+				s.reportError(fmt.Sprintf("type mismatch in comparison: %s vs %s", leftType, rightType))
 			}
+
 			return "bool"
 		}
 
-		if e.Op == tokens.DOT {
+		if e.Operation == tokens.DOT {
 			if leftType != "string" && rightType != "string" {
-				s.reportError("Both operands of '.' must be string")
+				s.reportError("both operands of '.' must be string")
 			}
+
 			return "string"
 		}
 
-		s.reportError("Unknown binary operator")
-		return "unknown"
+		s.reportError("unknown binary operator")
 
+		return "unknown"
 	case *ast.FuncCall:
 		fn, ok := s.funcs[e.Name]
 		if !ok {
-			s.reportError(fmt.Sprintf("Undefined function '%s'", e.Name))
+			s.reportError(fmt.Sprintf("undefined function '%s'", e.Name))
 			return "unknown"
 		}
 
-		if len(fn.Params) != len(e.Args) {
-			s.reportError(fmt.Sprintf("Argument count mismatch in function '%s'", e.Name))
+		if len(fn.Params) != len(e.Arguments) {
+			s.reportError(fmt.Sprintf("argument count mismatch in function '%s'", e.Name))
 		} else {
 			for i, param := range fn.Params {
-				argType := s.analyzeExpr(e.Args[i])
+				argumentType := s.analyzeExpression(e.Arguments[i])
 				paramType := tokens.Token(param.Type).String()
-				if argType != paramType {
-					s.reportError(fmt.Sprintf("Type mismatch in argument %d of function '%s': expected %s, got %s",
-						i+1, e.Name, paramType, argType))
+
+				if argumentType != paramType {
+					s.reportError(fmt.Sprintf(
+						"type mismatch in argument %d of function '%s': expected %s, got %s",
+						i+1,
+						e.Name,
+						paramType,
+						argumentType,
+					))
 				}
 			}
 		}
-		return tokens.Token(fn.ReturnType).String()
 
+		return tokens.Token(fn.ReturnType).String()
 	default:
-		s.reportError("Unknown expression type")
+		s.reportError("unknown expression type")
 		return "unknown"
 	}
 }
 
-// ====== Operadores ======
-
-func isArithmeticOp(op tokens.Token) bool {
-	return op == tokens.ADD || op == tokens.SUB || op == tokens.MUL ||
-		op == tokens.DIV || op == tokens.REM
+func isArithmeticOperation(operation tokens.Token) bool {
+	return operation == tokens.ADD || operation == tokens.SUB || operation == tokens.MUL ||
+		operation == tokens.DIV || operation == tokens.REM
 }
 
-func isComparisonOp(op tokens.Token) bool {
-	return op == tokens.EQUAL || op == tokens.NEQUAL || op == tokens.LT ||
-		op == tokens.LTOE || op == tokens.GT || op == tokens.GTOE
+func isComparisonOperation(operation tokens.Token) bool {
+	return operation == tokens.EQUAL || operation == tokens.NEQUAL || operation == tokens.LT ||
+		operation == tokens.LTOE || operation == tokens.GT || operation == tokens.GTOE
 }
-
-// ====== Erro ======
 
 func (s *SemanticAnalyzer) reportError(msg string) {
-	s.errors = append(s.errors, msg)
+	s.Errors = append(s.Errors, msg)
 }

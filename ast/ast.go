@@ -4,25 +4,19 @@ import (
 	"github.com/GabrielSathler/Compilador-MASClang/tokens"
 )
 
-// ===== Interfaces =====
-
 type Node interface {
 	Pos() int
 }
 
-type Expr interface {
+type Expression interface {
 	Node
 }
 
-// ===== Programa =====
-
 type Program struct {
-	Decls []Node
+	Declarations []Node
 }
 
 func (p *Program) Pos() int { return 0 }
-
-// ===== Função =====
 
 type Function struct {
 	Name       string
@@ -38,42 +32,32 @@ type Param struct {
 	Type tokens.Token
 }
 
-// ===== Bloco de Código =====
-
 type CodeBlock struct {
-	Stmts []Node
+	Statements []Node
 }
 
 func (b *CodeBlock) Pos() int { return 0 }
 
-// ===== Declaração de Variável =====
-
 type Var struct {
 	Name  string
 	Type  tokens.Token
-	Value Expr
+	Value Expression
 }
 
 func (v *Var) Pos() int { return 0 }
 
-// ===== Atribuição =====
-
 type Assignment struct {
 	Name  string
-	Value Expr
+	Value Expression
 }
 
 func (a *Assignment) Pos() int { return 0 }
 
-// ===== Retorno =====
-
 type Return struct {
-	Value Expr // pode ser nil para retorno vazio
+	Value Expression
 }
 
 func (r *Return) Pos() int { return 0 }
-
-// ===== Expressões Literais =====
 
 type IntLiteral struct {
 	Value int
@@ -105,56 +89,66 @@ type BoolLiteral struct {
 
 func (b *BoolLiteral) Pos() int { return 0 }
 
-// ===== Identificador =====
-
 type Ident struct {
 	Name string
 }
 
 func (i *Ident) Pos() int { return 0 }
 
-// ===== Operações Binárias =====
-
-type BinaryExpr struct {
-	Left  Expr
-	Op    tokens.Token
-	Right Expr
+type BinaryExpression struct {
+	Left      Expression
+	Operation tokens.Token
+	Right     Expression
 }
 
-func (b *BinaryExpr) Pos() int { return 0 }
-
-// ===== Chamada de Função =====
-
-type FuncCall struct {
-	Name string
-	Args []Expr
-}
-
-func (f *FuncCall) Pos() int { return 0 }
-
-// ===== Condicional If =====
+func (b *BinaryExpression) Pos() int { return 0 }
 
 type If struct {
-	Condition Expr
+	Condition Expression
 	ThenBlock *CodeBlock
-	ElseBlock *CodeBlock // Pode ser nil
+	ElseBlock *CodeBlock
 }
 
 func (i *If) Pos() int { return 0 }
 
-// ===== Laço While =====
+type For struct {
+	Init      Node
+	Condition Expression
+	Increment Node
+	Body      *CodeBlock
+}
+
+func (f *For) Pos() int { return 0 }
 
 type While struct {
-	Condition Expr
+	Condition Expression
 	Body      *CodeBlock
 }
 
 func (w *While) Pos() int { return 0 }
 
-// ===== Laço For =====
-
-type For struct {
-	Init      Node
-	Condition Expr
-	Increment Node
+type Print struct {
+	Value Expression
 }
+
+func (p *Print) Pos() int { return 0 }
+
+type Input struct {
+	Value string
+}
+
+func (i *Input) Pos() int { return 0 }
+
+type Assign struct {
+	Name  string
+	Value Expression
+}
+
+func (a *Assign) Pos() int { return 0 }
+
+type FuncCall struct {
+	Name      string
+	Arguments []Expression
+}
+
+func (f *FuncCall) Pos() int { return 0 }
