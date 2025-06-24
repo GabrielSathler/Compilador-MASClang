@@ -163,6 +163,23 @@ func (s *SemanticAnalyzer) analyzeExpression(expression ast.Expression) string {
 		leftType := s.analyzeExpression(e.Left)
 		rightType := s.analyzeExpression(e.Right)
 
+		if e.Operation == tokens.ADD || e.Operation == tokens.DOT {
+			if leftType == "string" || rightType == "string" {
+				return "string"
+			}
+
+			if leftType == "int" && rightType == "int" {
+				return "int"
+			}
+
+			if leftType == "float" && rightType == "float" {
+				return "float"
+			}
+
+			s.reportError(fmt.Sprintf("invalid operand types for '+' at line %s", strconv.Itoa(e.LineIdent)))
+			return "unknown"
+		}
+
 		if isArithmeticOperation(e.Operation) {
 			if leftType != "int" && leftType != "float" {
 				s.reportError(fmt.Sprintf("invalid left operand type %s for arithmetic operator at line %s", leftType, strconv.Itoa(e.LineIdent)))
@@ -183,16 +200,7 @@ func (s *SemanticAnalyzer) analyzeExpression(expression ast.Expression) string {
 			return "bool"
 		}
 
-		if e.Operation == tokens.DOT {
-			if leftType != "string" && rightType != "string" {
-				s.reportError(fmt.Sprintf("both operands of '.' must be string at line %s", strconv.Itoa(e.LineIdent)))
-			}
-
-			return "string"
-		}
-
 		s.reportError(fmt.Sprintf("unknown binary operator at line %s", strconv.Itoa(e.LineIdent)))
-
 		return "unknown"
 	case *ast.FuncCall:
 		fn, ok := s.funcs[e.Name]
