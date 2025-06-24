@@ -3,7 +3,9 @@ package syntactic_analyzer
 import (
 	"fmt"
 	"io"
+	"strconv"
 
+	"github.com/GabrielSathler/Compilador-MASClang/ast"
 	"github.com/GabrielSathler/Compilador-MASClang/lexical_analyzer"
 	"github.com/GabrielSathler/Compilador-MASClang/tokens"
 )
@@ -19,6 +21,7 @@ func NewParser(reader io.Reader) *Parser {
 	lexer := lexical_analyzer.NewLexer(reader)
 	p := &Parser{lexer: lexer}
 	p.advance()
+
 	return p
 }
 
@@ -34,79 +37,278 @@ func (p *Parser) expect(expectedToken tokens.Token) {
 	p.advance()
 }
 
-func (p *Parser) parseBlock() {
-	p.expect(tokens.LBRACE)
-
-	for p.currToken != tokens.RBRACE && p.currToken != tokens.EOF {
-		p.parseStatement()
-	}
-
-	p.expect(tokens.RBRACE)
-}
-
 func isValidType(t tokens.Token) bool {
 	return t == tokens.INT || t == tokens.STRING || t == tokens.FLOAT || t == tokens.CHAR || t == tokens.BOOL
 }
 
-func (p *Parser) ParseProgram() {
+func (p *Parser) parseBlock() *ast.CodeBlock {
+	p.expect(tokens.LBRACE)
+	statements := []ast.Node{}
+
+	line := p.pos.Line
+
+	for p.currToken != tokens.RBRACE && p.currToken != tokens.EOF {
+		statement := p.parseStatement()
+
+		if statement != nil {
+			statements = append(statements, statement)
+		}
+	}
+
+	p.expect(tokens.RBRACE)
+
+	return &ast.CodeBlock{Statements: statements, LineIdent: line}
+}
+
+func (p *Parser) ParseProgram() *ast.Program {
+	program := &ast.Program{Declarations: []ast.Node{}}
+
 	for p.currToken != tokens.EOF {
 		switch p.currToken {
 		case tokens.FUNC:
-			p.parseFunction()
-		case tokens.IF:
-			p.parseIf()
+			fn := p.parseFunction()
+			program.Declarations = append(program.Declarations, fn)
 		case tokens.VAR:
-			p.parseVar()
+			v := p.parseVar()
+			program.Declarations = append(program.Declarations, v)
+		case tokens.IF:
+			statement := p.parseIf()
+			program.Declarations = append(program.Declarations, statement)
 		case tokens.FOR:
-			p.parseFor()
+			statement := p.parseFor()
+			program.Declarations = append(program.Declarations, statement)
 		case tokens.WHILE:
-			p.parseWhile()
+			statement := p.parseWhile()
+			program.Declarations = append(program.Declarations, statement)
 		case tokens.PRINT:
-			p.parsePrint()
+			statement := p.parsePrint()
+			program.Declarations = append(program.Declarations, statement)
 		case tokens.INPUT:
-			p.parseInput()
+			statement := p.parseInput()
+			program.Declarations = append(program.Declarations, statement)
+		case tokens.RETURN:
+			statement := p.parseReturn()
+			program.Declarations = append(program.Declarations, statement)
 		case tokens.IDENT:
-			p.parseAssignmentOrFuncCall(true)
+			statement := p.parseAssignmentOrFuncCall(true)
+			program.Declarations = append(program.Declarations, statement)
 		default:
 			panic(fmt.Sprintf("unexpected token %v at %v", p.currToken, p.pos))
 		}
 	}
+
+	return program
 }
 
-func (p *Parser) parseStatement() {
+func (p *Parser) parseFunction() *ast.Function {
+	p.expect(tokens.FUNC)
+
+	name := p.currLex
+	line := p.pos.Line
+
+	p.expect(tokens.IDENT)
+	p.expect(tokens.LPAREN)
+
+	params := p.parseFunctionParameters()
+
+	p.expect(tokens.RPAREN)
+	p.expect(tokens.COLON)
+
+	returnType := p.currToken
+
+	p.advance()
+	body := p.parseBlock()
+
+	return &ast.Function{Name: name, Params: params, ReturnType: returnType, Body: body, LineIdent: line}
+}
+
+func (p *Parser) parseFunctionParameters() []ast.Param {
+	params := []ast.Param{}
+
+	for p.currToken != tokens.RPAREN {
+		name := p.currLex
+
+		p.expect(tokens.IDENT)
+		p.expect(tokens.COLON)
+
+		parameterType := p.currToken
+
+		p.advance()
+		params = append(params, ast.Param{Name: name, Type: parameterType})
+
+		if p.currToken == tokens.COMMA {
+			p.advance()
+		}
+	}
+
+	return params
+}
+
+func (p *Parser) parseStatement() ast.Node {
 	switch p.currToken {
 	case tokens.IF:
-		p.parseIf()
+		return p.parseIf()
 	case tokens.VAR:
-		p.parseVar()
+		return p.parseVar()
 	case tokens.FOR:
-		p.parseFor()
+		return p.parseFor()
 	case tokens.WHILE:
-		p.parseWhile()
+		return p.parseWhile()
 	case tokens.PRINT:
-		p.parsePrint()
+		return p.parsePrint()
 	case tokens.INPUT:
-		p.parseInput()
+		return p.parseInput()
 	case tokens.RETURN:
-		p.parseReturn()
+		return p.parseReturn()
 	case tokens.IDENT:
-		p.parseAssignmentOrFuncCall(true)
+		return p.parseAssignmentOrFuncCall(true)
 	default:
 		panic(fmt.Sprintf("unexpected token %v at %v", p.currToken, p.pos))
 	}
 }
 
-func (p *Parser) parseAssignmentOrFuncCall(requireSemi bool) {
+func (p *Parser) parseIf() ast.Node {
+	p.expect(tokens.IF)
+	p.expect(tokens.LPAREN)
+
+	line := p.pos.Line
+	condition := p.parseComparison()
+
+	p.expect(tokens.RPAREN)
+
+	thenBlock := p.parseBlock()
+
+	var elseBlock *ast.CodeBlock = nil
+	if p.currToken == tokens.ELSE {
+		p.advance()
+		elseBlock = p.parseBlock()
+	}
+
+	return &ast.If{Condition: condition, ThenBlock: thenBlock, ElseBlock: elseBlock, LineIdent: line}
+}
+
+func (p *Parser) parseVar() *ast.Var {
+	p.expect(tokens.VAR)
+
+	if p.currToken != tokens.IDENT {
+		panic(fmt.Sprintf("expected variable name, got %v at %v", p.currToken, p.pos))
+	}
+
+	name := p.currLex
+	line := p.pos.Line
+	p.advance()
+
+	p.expect(tokens.COLON)
+
+	if !isValidType(p.currToken) {
+		panic(fmt.Sprintf("expected variable type, got %v at %v", p.currToken, p.pos))
+	}
+
+	typeTok := p.currToken
+	p.advance()
+
+	var value ast.Expression = nil
+	if p.currToken == tokens.ASSIGN {
+		p.advance()
+		value = p.parseComparison()
+	}
+
+	p.expect(tokens.SEMI)
+
+	return &ast.Var{Name: name, Type: typeTok, Value: value, LineIdent: line}
+}
+
+func (p *Parser) parseFor() ast.Node {
+	p.expect(tokens.FOR)
+	p.expect(tokens.LPAREN)
+
+	var init ast.Node = nil
+	if p.currToken == tokens.VAR {
+		init = p.parseVar()
+	} else {
+		init = p.parseAssignmentOrFuncCall(true)
+	}
+
+	line := p.pos.Line
+	condition := p.parseComparison()
+
+	p.expect(tokens.SEMI)
+
+	post := p.parseAssignmentOrFuncCall(false)
+
+	p.expect(tokens.RPAREN)
+
+	body := p.parseBlock()
+	return &ast.For{Init: init, Condition: condition, Increment: post, Body: body, LineIdent: line}
+}
+
+func (p *Parser) parseWhile() ast.Node {
+	p.expect(tokens.WHILE)
+	p.expect(tokens.LPAREN)
+
+	line := p.pos.Line
+	condition := p.parseComparison()
+
+	p.expect(tokens.RPAREN)
+
+	body := p.parseBlock()
+	return &ast.While{Condition: condition, Body: body, LineIdent: line}
+}
+
+func (p *Parser) parsePrint() ast.Node {
+	p.expect(tokens.PRINT)
+	p.expect(tokens.LPAREN)
+
+	line := p.pos.Line
+	value := p.parseAdditive()
+
+	p.expect(tokens.RPAREN)
+	p.expect(tokens.SEMI)
+
+	return &ast.Print{Value: value, LineIdent: line}
+}
+
+func (p *Parser) parseInput() ast.Node {
+	p.expect(tokens.INPUT)
+	p.expect(tokens.LPAREN)
+
+	line := p.pos.Line
+	value := p.currLex
+
+	p.expect(tokens.IDENT)
+	p.expect(tokens.RPAREN)
+	p.expect(tokens.SEMI)
+
+	return &ast.Input{Value: value, LineIdent: line}
+}
+
+func (p *Parser) parseReturn() ast.Node {
+	p.expect(tokens.RETURN)
+	line := p.pos.Line
+
+	var value ast.Expression = nil
+	if p.currToken != tokens.SEMI {
+		value = p.parseAdditive()
+	}
+
+	p.expect(tokens.SEMI)
+
+	return &ast.Return{Value: value, LineIdent: line}
+}
+
+func (p *Parser) parseAssignmentOrFuncCall(requireSemi bool) ast.Node {
 	if p.currToken != tokens.IDENT {
 		panic(fmt.Sprintf("expected identifier, got %v at %v", p.currToken, p.pos))
 	}
 
+	line := p.pos.Line
+	name := p.currLex
 	p.advance()
 
 	switch p.currToken {
 	case tokens.ASSIGN:
 		p.advance()
-		p.parseAdditive()
+		value := p.parseAdditive()
 
 		if requireSemi {
 			if p.currToken != tokens.SEMI {
@@ -115,207 +317,159 @@ func (p *Parser) parseAssignmentOrFuncCall(requireSemi bool) {
 
 			p.advance()
 		}
+
+		return &ast.Assign{Name: name, Value: value, LineIdent: line}
 	case tokens.LPAREN:
 		p.advance()
-		p.parseArguments()
+		arguments := []ast.Expression{}
+
+		if p.currToken != tokens.RPAREN {
+			for {
+				argument := p.parseAdditive()
+				arguments = append(arguments, argument)
+
+				if p.currToken == tokens.COMMA {
+					p.advance()
+					continue
+				}
+
+				break
+			}
+		}
+
 		p.expect(tokens.RPAREN)
 
 		if requireSemi {
 			p.expect(tokens.SEMI)
 		}
+
+		return &ast.FuncCall{Name: name, Arguments: arguments, LineIdent: p.pos.Line}
 	default:
 		panic(fmt.Sprintf("unexpected token after identifier %v at %v", p.currToken, p.pos))
 	}
 }
 
-func (p *Parser) parseFunction() {
-	p.expect(tokens.FUNC)
-
-	if p.currToken != tokens.IDENT {
-		panic(fmt.Sprintf("expected function name, got %v at %v", p.currToken, p.pos))
-	}
-
-	p.advance()
-	p.expect(tokens.LPAREN)
-	p.parseFunctionParameters()
-	p.expect(tokens.RPAREN)
-	p.expect(tokens.COLON)
-
-	if !isValidType(p.currToken) {
-		panic(fmt.Sprintf("expected return type, got %v at %v", p.currToken, p.pos))
-	}
-
-	p.advance()
-	p.parseBlock()
-}
-
-func (p *Parser) parseFunctionParameters() {
-	for p.currToken != tokens.RPAREN {
-		if p.currToken != tokens.IDENT {
-			panic(fmt.Sprintf("expected parameter name, got %v at %v", p.currToken, p.pos))
-		}
-
-		p.advance()
-		p.expect(tokens.COLON)
-
-		if !isValidType(p.currToken) {
-			panic(fmt.Sprintf("expected parameter type, got %v at %v", p.currToken, p.pos))
-		}
-
-		p.advance()
-
-		if p.currToken == tokens.COMMA {
-			p.advance()
-		}
-	}
-}
-
-func (p *Parser) parseIf() {
-	p.expect(tokens.IF)
-	p.expect(tokens.LPAREN)
-	p.parseComparison()
-	p.expect(tokens.RPAREN)
-	p.parseBlock()
-
-	if p.currToken == tokens.ELSE {
-		p.advance()
-		p.parseBlock()
-	}
-}
-
-func (p *Parser) parseWhile() {
-	p.expect(tokens.WHILE)
-	p.expect(tokens.LPAREN)
-	p.parseComparison()
-	p.expect(tokens.RPAREN)
-	p.parseBlock()
-}
-
-func (p *Parser) parseVar() {
-	p.expect(tokens.VAR)
-
-	if p.currToken != tokens.IDENT {
-		panic(fmt.Sprintf("expected variable name, got %v at %v", p.currToken, p.pos))
-	}
-
-	p.advance()
-	p.expect(tokens.COLON)
-
-	if !isValidType(p.currToken) {
-		panic(fmt.Sprintf("expected variable type, got %v at %v", p.currToken, p.pos))
-	}
-
-	p.advance()
-
-	if p.currToken == tokens.ASSIGN {
-		p.advance()
-		p.parseAdditive()
-	}
-
-	p.expect(tokens.SEMI)
-}
-
-func (p *Parser) parsePrint() {
-	p.expect(tokens.PRINT)
-	p.expect(tokens.LPAREN)
-	p.parseAdditive()
-	p.expect(tokens.RPAREN)
-	p.expect(tokens.SEMI)
-}
-
-func (p *Parser) parseInput() {
-	p.expect(tokens.INPUT)
-	p.expect(tokens.LPAREN)
-	p.expect(tokens.IDENT)
-	p.expect(tokens.RPAREN)
-	p.expect(tokens.SEMI)
-}
-
-func (p *Parser) parseReturn() {
-	p.expect(tokens.RETURN)
-
-	if p.currToken != tokens.SEMI {
-		p.parseAdditive()
-	}
-
-	p.expect(tokens.SEMI)
-}
-
-func (p *Parser) parseFor() {
-	p.expect(tokens.FOR)
-	p.expect(tokens.LPAREN)
-
-	if p.currToken == tokens.VAR {
-		p.parseVar()
-	} else {
-		p.parseAssignmentOrFuncCall(true)
-	}
-
-	p.parseComparison()
-	p.expect(tokens.SEMI)
-	p.parseAssignmentOrFuncCall(false)
-	p.expect(tokens.RPAREN)
-	p.parseBlock()
-}
-
-func (p *Parser) parseArguments() {
-	for p.currToken != tokens.RPAREN {
-		p.parseAdditive()
-
-		if p.currToken == tokens.COMMA {
-			p.advance()
-		}
-	}
-}
-
-func (p *Parser) parseComparison() {
-	p.parseAdditive()
+func (p *Parser) parseComparison() ast.Expression {
+	left := p.parseAdditive()
 
 	for p.currToken == tokens.EQUAL || p.currToken == tokens.NEQUAL ||
 		p.currToken == tokens.LT || p.currToken == tokens.LTOE ||
 		p.currToken == tokens.GT || p.currToken == tokens.GTOE {
+		line := p.pos.Line
+		operation := p.currToken
 		p.advance()
-		p.parseAdditive()
+
+		right := p.parseAdditive()
+		left = &ast.BinaryExpression{Left: left, Operation: operation, Right: right, LineIdent: line}
 	}
 
-	if p.currToken == tokens.ASSIGN {
-		panic(fmt.Sprintf("unexpected assignment operator in comparison at %v", p.pos))
-	}
+	return left
 }
 
-func (p *Parser) parseAdditive() {
-	p.parseMultiplicative()
+func (p *Parser) parseAdditive() ast.Expression {
+	left := p.parseMultiplicative()
 
 	for p.currToken == tokens.ADD || p.currToken == tokens.SUB || p.currToken == tokens.DOT {
+		line := p.pos.Line
+		operation := p.currToken
 		p.advance()
-		p.parseMultiplicative()
+
+		right := p.parseMultiplicative()
+		left = &ast.BinaryExpression{Left: left, Operation: operation, Right: right, LineIdent: line}
 	}
+
+	return left
 }
 
-func (p *Parser) parseMultiplicative() {
-	p.parseFactor()
+func (p *Parser) parseMultiplicative() ast.Expression {
+	left := p.parseFactor()
 
 	for p.currToken == tokens.MUL || p.currToken == tokens.DIV || p.currToken == tokens.REM {
+		line := p.pos.Line
+		operation := p.currToken
 		p.advance()
-		p.parseFactor()
+
+		right := p.parseFactor()
+		left = &ast.BinaryExpression{Left: left, Operation: operation, Right: right, LineIdent: line}
 	}
+
+	return left
 }
 
-func (p *Parser) parseFactor() {
+func (p *Parser) parseFactor() ast.Expression {
 	switch p.currToken {
-	case tokens.INT, tokens.STRING, tokens.FLOAT, tokens.CHAR, tokens.BOOL, tokens.TRUE, tokens.FALSE:
-		p.advance()
-	case tokens.IDENT:
+	case tokens.INT:
+		line := p.pos.Line
+		stringValue := p.currLex
 		p.advance()
 
-		switch p.currToken {
-		case tokens.LPAREN:
-			p.advance()
-			p.parseArguments()
-			p.expect(tokens.RPAREN)
-		case tokens.ASSIGN:
-			panic(fmt.Sprintf("unexpected assignment operator in factor at %v", p.pos))
+		value, err := strconv.Atoi(stringValue)
+
+		if err != nil {
+			panic(fmt.Sprintf("invalid integer literal: %v", stringValue))
 		}
+
+		return &ast.IntLiteral{Value: value, LineIdent: line}
+	case tokens.STRING:
+		line := p.pos.Line
+		value := p.currLex
+		p.advance()
+
+		return &ast.StringLiteral{Value: value, LineIdent: line}
+	case tokens.CHAR:
+		line := p.pos.Line
+		value := p.currLex
+		p.advance()
+
+		if len(value) == 3 && value[0] == '\'' && value[2] == '\'' {
+			return &ast.CharLiteral{Value: rune(value[1]), LineIdent: line}
+		} else if len(value) == 1 {
+			return &ast.CharLiteral{Value: rune(value[0]), LineIdent: line}
+		} else {
+			panic(fmt.Sprintf("invalid char literal: %v", value))
+		}
+	case tokens.FLOAT:
+		line := p.pos.Line
+		stringValue := p.currLex
+		p.advance()
+
+		value, err := strconv.ParseFloat(stringValue, 64)
+		if err != nil {
+			panic(fmt.Sprintf("invalid float literal: %v", stringValue))
+		}
+
+		return &ast.FloatLiteral{Value: value, LineIdent: line}
+	case tokens.TRUE, tokens.FALSE:
+		line := p.pos.Line
+		value := (p.currToken == tokens.TRUE)
+		p.advance()
+
+		return &ast.BoolLiteral{Value: value, LineIdent: line}
+	case tokens.IDENT:
+		line := p.pos.Line
+		name := p.currLex
+		p.advance()
+
+		if p.currToken == tokens.LPAREN {
+			p.advance()
+			arguments := []ast.Expression{}
+
+			if p.currToken != tokens.RPAREN {
+				for {
+					arguments = append(arguments, p.parseComparison())
+					if p.currToken == tokens.COMMA {
+						p.advance()
+					} else {
+						break
+					}
+				}
+			}
+
+			p.expect(tokens.RPAREN)
+			return &ast.FuncCall{Name: name, Arguments: arguments, LineIdent: line}
+		}
+
+		return &ast.Ident{Name: name, LineIdent: line}
 	default:
 		panic(fmt.Sprintf("unexpected token %v at %v", p.currToken, p.pos))
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/GabrielSathler/Compilador-MASClang/semantic_analyzer"
 	"github.com/GabrielSathler/Compilador-MASClang/syntactic_analyzer"
 )
 
@@ -12,16 +13,28 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
 	defer file.Close()
 
-	p := syntactic_analyzer.NewParser(file)
+	parser := syntactic_analyzer.NewParser(file)
 
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("error parsing: %v\n", r)
+			fmt.Printf("Error parsing: %v\n", r)
 		}
 	}()
 
-	p.ParseProgram()
+	program := parser.ParseProgram()
+
+	analyzer := semantic_analyzer.NewSemanticAnalyzer()
+	analyzer.Analyze(program)
+
+	if errs := analyzer.Errors; len(errs) > 0 {
+		fmt.Println("Semantic errors:")
+
+		for _, err := range errs {
+			fmt.Println(" -", err)
+		}
+
+		return
+	}
 }
