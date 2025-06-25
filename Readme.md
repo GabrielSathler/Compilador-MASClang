@@ -2,6 +2,37 @@
 
 ## Gramática
 
+Para definir a gramática fizemos uma análise nas principais declarações da linguagem, que resultou em:
+
+### Tipos presentes na linguagem
+- "int" | "float" | "char" | "bool" | "string"
+
+### Declaração de variáveis
+- "var" IDENT ":" tipo ("=" expressao)? ";"
+
+### Entrada e saída
+- "input" "(" IDENT ")" ";"
+- "print" "(" expressao ")" ";"
+
+### Estruturas Condicionais
+- "if" "(" expressao ")" bloco ("else" bloco)?
+
+### Laços de Repetição
+- "for" "(" declaracao | atribuicao ";" expressao ";" atribuicao ")" bloco
+- "while" "(" expressao ")" bloco
+
+### Funções
+- "func" IDENT "(" parametros? ")" ":" tipo bloco
+
+### Bloco de código
+- "{" (comando)* "}"
+
+### Retorno
+- "return" expressao ";"
+
+### Parâmetros de função
+- IDENT ":" tipo
+
 ## Arquitetura
 
 Para a arquitetura do projeto decidimos seguir como um "orientado por pacotes", onde cada pacote contém structs principais do projeto, como: AST (Árvore de Sintaxe Abstrata), analisador léxico, os tokens da linguagem, analisador sintático (parser) e analisador semântico.
